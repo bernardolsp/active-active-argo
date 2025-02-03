@@ -6,9 +6,8 @@ metadata:
 spec:
   project: 'default'
   source:
-    plugin: {}
     repoURL: https://github.com/bernardolsp/active-active-argo.git
-    targetRevision: main
+    targetRevision: HEAD
     path: app-default
   destination:
     namespace: active-active-argo
