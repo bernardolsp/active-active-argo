@@ -4,6 +4,7 @@ kind: Ingress
 metadata:
   name: {{ .Release.Name }}-whoami
 spec:
+  ingressClassName: cloudflare-tunnel
   rules:
     - host: {{ .Values.ingress.host }}
       http:
