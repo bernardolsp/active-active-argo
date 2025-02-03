@@ -12,4 +12,4 @@ service:
 
 ingress:
   enabled: true
-  host: https://testing-2.bernardolopes.com
+  host: testing-2.bernardolopes.com
