@@ -1,0 +1,15 @@
+replicaCount: 1
+
+image:
+  repository: traefik/whoami
+  tag: v1.9.0
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+ingress:
+  enabled: true
+  host: internal-app-abc.bernardolopes.com

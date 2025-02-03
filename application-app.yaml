@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: active-active-argo
+  namespace: argo
+spec:
+  project: 'default'
+  source:
+    plugin: {}
+    repoURL: https://github.com/bernardolsp/active-active-argo.git
+    targetRevision: main
+    path: app-default
+  destination:
+    namespace: active-active-argo
+    server: 'https://kubernetes.default.svc'
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
