@@ -1,42 +1,42 @@
-# apiversion: batch/v1
-# kind: Job
-# metadata:
-#   generateName: {{ .Release.Name }}-postdeploy-job-
-#   annotations:
-#     argocd.argoproj.io/hook: PostSync
-#     argocd.argoproj.io/hook-delete-policy: HookSucceeded
-# spec:
-#   template:
-#     spec:
-#       containers:
-#       - name: cloudflare-lb-thingy
-#         image: devlopesbernardo/cloudflare-lb-thingy:latest
-#         imagePullPolicy: Always
-#         env:
-#           - name: EMAIL
-#             valueFrom:
-#               secretKeyRef:
-#                 name: cluster-1-postdeploy-cloudflare
-#                 key: EMAIL
-#                 optional: false
-#           - name: API_KEY
-#             valueFrom:
-#               secretKeyRef:
-#                 name: cluster-1-postdeploy-cloudflare
-#                 key: API_KEY
-#                 optional: false
-#           - name: POOL_ID
-#             valueFrom:
-#               secretKeyRef:
-#                 name: cluster-1-postdeploy-cloudflare
-#                 key: POOL_ID
-#                 optional: false
-#           - name: ACCOUNT_ID
-#             valueFrom:
-#               secretKeyRef:
-#                 name: cluster-1-postdeploy-cloudflare
-#                 key: ACCOUNT_ID
-#                 optional: false
-#           - name: URLS
-#             value: "google.com,facebook.com"
-#       restartPolicy: OnFailure
+apiversion: batch/v1
+kind: Job
+metadata:
+  generateName: {{ .Release.Name }}-postdeploy-job-
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: cloudflare-lb-thingy
+        image: devlopesbernardo/cloudflare-lb-thingy:latest
+        imagePullPolicy: Always
+        env:
+          - name: EMAIL
+            valueFrom:
+              secretKeyRef:
+                name: cluster-1-postdeploy-cloudflare
+                key: EMAIL
+                optional: false
+          - name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: cluster-1-postdeploy-cloudflare
+                key: API_KEY
+                optional: false
+          - name: POOL_ID
+            valueFrom:
+              secretKeyRef:
+                name: cluster-1-postdeploy-cloudflare
+                key: POOL_ID
+                optional: false
+          - name: ACCOUNT_ID
+            valueFrom:
+              secretKeyRef:
+                name: cluster-1-postdeploy-cloudflare
+                key: ACCOUNT_ID
+                optional: false
+          - name: URLS
+            value: "google.com,facebook.com"
+      restartPolicy: OnFailure
