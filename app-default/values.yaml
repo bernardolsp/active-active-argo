@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: traefik/whoami
-  tag: v1.10.0
+  tag: v1.09.0
   pullPolicy: IfNotPresent
 
 service:
