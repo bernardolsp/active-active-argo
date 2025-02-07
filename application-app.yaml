@@ -1,19 +1,36 @@
 apiVersion: argoproj.io/v1alpha1
-kind: Application
+kind: ApplicationSet
 metadata:
   name: active-active-argo
   namespace: argo
 spec:
-  project: 'default'
-  source:
-    repoURL: https://github.com/bernardolsp/active-active-argo.git
-    targetRevision: HEAD
-    path: app-default
-  destination:
-    namespace: active-active-argo
-    server: 'https://kubernetes.default.svc'
-  syncPolicy:
-    automated:
-      selfHeal: true
-    syncOptions:
-    - CreateNamespace=true
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - cluster: node01
+            url: https://kubernetes.default.svc
+          - cluster: node02
+            url: https://172.16.0.111:6443
+  template:
+    metadata:
+      name: 'app-{{.cluster}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/bernardolsp/active-active-argo.git
+        targetRevision: HEAD
+        path: app-default
+        helm:
+          values: |
+            ingress:
+              enabled: true
+              host: '{{.cluster}}.bernardolopes.com'
+      destination:
+        namespace: active-active-argo
+        server: '{{ .url }}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true

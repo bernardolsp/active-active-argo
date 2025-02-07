@@ -16,25 +16,25 @@ spec:
           - name: EMAIL
             valueFrom:
               secretKeyRef:
-                name: cluster-1-predeploy-cloudflare
+                name: cloudflare-secret
                 key: EMAIL
                 optional: false
           - name: API_KEY
             valueFrom:
               secretKeyRef:
-                name: cluster-1-predeploy-cloudflare
+                name: cloudflare-secret
                 key: API_KEY
                 optional: false
           - name: POOL_ID
             valueFrom:
               secretKeyRef:
-                name: cluster-1-predeploy-cloudflare
+                name: cloudflare-secret
                 key: POOL_ID
                 optional: false
           - name: ACCOUNT_ID
             valueFrom:
               secretKeyRef:
-                name: cluster-1-predeploy-cloudflare
+                name: cloudflare-secret
                 key: ACCOUNT_ID
                 optional: false
           - name: URLS
