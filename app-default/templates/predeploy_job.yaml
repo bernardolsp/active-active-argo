@@ -37,6 +37,10 @@ spec:
                 name: cloudflare-secret
                 key: ACCOUNT_ID
                 optional: false
-          - name: URLS
-            value: "google.com,facebook.com"
+          - name: URLS # if {{ .Values.cluster_name }} == "node01" then "app-node02"
+            {{- if eq .Values.cluster_name "node01" }}
+            value: "app-node02.bernardolopes.com"
+            {{- else }}
+            value: "app-node01.bernardolopes.com"
+            {{- end }}
       restartPolicy: OnFailure

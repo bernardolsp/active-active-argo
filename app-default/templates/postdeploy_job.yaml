@@ -38,5 +38,5 @@ spec:
                 key: ACCOUNT_ID
                 optional: false
           - name: URLS
-            value: "google.com,facebook.com"
+            value: "app-node01.bernardolopes.com,app-node02.bernardolopes.com"
       restartPolicy: OnFailure
