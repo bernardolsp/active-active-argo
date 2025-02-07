@@ -23,6 +23,7 @@ spec:
         path: app-default
         helm:
           values: |
+            cluster_name: '{{.cluster}}'
             ingress:
               enabled: true
               host: 'app-{{.cluster}}.bernardolopes.com'
