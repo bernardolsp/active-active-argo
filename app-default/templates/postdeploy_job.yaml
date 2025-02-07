@@ -10,7 +10,7 @@ spec:
     spec:
       containers:
       - name: cloudflare-lb-thingy
-        image: devlopesbernardo/cloudflare-lb-thingy:latest
+        image: devlopesbernardo/cloudflare-lb-thingy:x86
         imagePullPolicy: Always
         env:
           - name: EMAIL
