@@ -19,18 +19,20 @@ spec:
     rollingSync:
       steps:
         - matchExpressions:
-            - key: order
+            - key: orderLabel
               operator: In
               values:
                 - first
         - matchExpressions:
-            - key: order
+            - key: orderLabel
               operator: In
               values:
                 - second
   template:
     metadata:
       name: 'app-{{.cluster}}'
+      labels:
+        orderLabel: '{{.order}}'
     spec:
       project: default
       source:
