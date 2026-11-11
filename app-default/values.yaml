@@ -12,3 +12,13 @@ service:
 
 ingress:
   enabled: true
+  host: ""
+
+cluster_name: node01
+
+hooks:
+  mode: cloudflare
+  local:
+    gateway: ""
+    region: ""
+    drainSeconds: 5

@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: active-active-argo
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - region: east
+            destination: in-cluster
+          - region: west
+            destination: lab-west
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: lab-region
+              operator: In
+              values: [east]
+        - matchExpressions:
+            - key: lab-region
+              operator: In
+              values: [west]
+  template:
+    metadata:
+      name: 'app-{{ .region }}'
+      labels:
+        lab-region: '{{ .region }}'
+    spec:
+      project: default
+      source:
+        repoURL: __REPO_URL__
+        targetRevision: __GIT_REF__
+        path: app-default
+        helm:
+          parameters:
+            - name: hooks.local.revision
+              value: $ARGOCD_APP_REVISION
+              forceString: true
+          values: |
+            ingress:
+              enabled: false
+            service:
+              type: NodePort
+              nodePort: 30080
+            hooks:
+              mode: local
+              local:
+                gateway: __GATEWAY_URL__
+                region: '{{ .region }}'
+                drainSeconds: __DRAIN_SECONDS__
+      destination:
+        name: '{{ .destination }}'
+        namespace: active-active-argo

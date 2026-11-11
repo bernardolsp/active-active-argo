@@ -1,3 +1,4 @@
+{{- if eq .Values.hooks.mode "cloudflare" }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -44,3 +45,4 @@ spec:
             value: "app-node01.bernardolopes.com"
             {{- end }}
       restartPolicy: OnFailure
+{{- end }}

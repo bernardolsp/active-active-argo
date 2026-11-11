@@ -10,5 +10,8 @@ spec:
     - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.targetPort }}
       protocol: TCP
+      {{- with .Values.service.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
   selector:
     app: whoami

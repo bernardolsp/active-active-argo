@@ -1,0 +1,42 @@
+{{- if eq .Values.hooks.mode "local" }}
+{{- $local := .Values.hooks.local }}
+{{- range $hook := list (dict "name" "drain" "phase" "PreSync") (dict "name" "enable" "phase" "PostSync") }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: {{ $.Release.Name }}-{{ $hook.name }}-
+  annotations:
+    argocd.argoproj.io/hook: {{ $hook.phase }}
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: gateway
+          image: curlimages/curl:8.12.1
+          env:
+            - name: LAB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lab-gateway
+                  key: token
+            - name: LAB_REVISION
+              value: {{ required "hooks.local.revision is required" $local.revision | quote }}
+            - name: LAB_URL
+              value: {{ printf "%s/_lab/%s/%s" (required "hooks.local.gateway is required" $local.gateway) (required "hooks.local.region is required" $local.region) $hook.name | quote }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              curl --fail-with-body --silent --show-error --max-time 5 --retry 8 --retry-delay 1 \
+                -X POST -H "Authorization: Bearer ${LAB_TOKEN}" \
+                -H "X-Lab-Revision: ${LAB_REVISION}" "${LAB_URL}"
+              {{- if eq $hook.name "drain" }}
+              sleep {{ $local.drainSeconds }}
+              {{- end }}
+{{- end }}
+{{- end }}
