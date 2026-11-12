@@ -32,14 +32,10 @@ kubectl --context kind-active-active-argo-east -n argocd get applications
 
 ## Demonstrar uma entrega
 
-1. Abra um terminal para acompanhar o tráfego. O cabeçalho `X-Lab-Region` indica o backend que atendeu cada requisição.
+1. Abra um terminal para acompanhar o tráfego. O script mostra a hora, o status HTTP e a região que respondeu a cada requisição. Use Ctrl+C para parar.
 
    ```bash
-   url=$(./setup.sh url)
-   while true; do
-     curl -fsSI --max-time 5 "$url/" | awk 'tolower($1) == "x-lab-region:" { print $2 }'
-     sleep 1
-   done
+   ./curl.sh
    ```
 
 2. Em outro terminal, altere `image.tag` de `v1.9.0` para `v1.11.0` em `app-default/values.yaml`, faça commit e envie a alteração para a branch que o Argo CD acompanha. A versão que atende o tráfego continua a mesma até o refresh.
