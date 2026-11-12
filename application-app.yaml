@@ -38,7 +38,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/bernardolsp/active-active-argo.git
-        targetRevision: HEAD
+        targetRevision: 12-nov-2026-workshop
         path: app-default
         helm:
           values: |

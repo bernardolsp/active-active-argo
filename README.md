@@ -7,7 +7,7 @@ Laboratório ativo-ativo com dois clusters Kubernetes no Kind. O gateway distrib
 Você precisa de Docker com o daemon ativo, Kind, kubectl, Git e curl. O bootstrap usa Kubernetes v1.35.0 e Argo CD v3.6.1 por padrão. A primeira execução baixa imagens para o Docker e para os dois clusters.
 
 ```bash
-git clone --branch codex/kind-active-active https://github.com/bernardolsp/active-active-argo.git
+git clone --branch 12-nov-2026-workshop https://github.com/bernardolsp/active-active-argo.git
 cd active-active-argo
 ./setup.sh
 ```
@@ -54,7 +54,7 @@ Para usar a branch publicada deste laboratório como fonte do Argo CD:
 
 ```bash
 REPO_URL=https://github.com/bernardolsp/active-active-argo.git \
-  GIT_REF=codex/kind-active-active ./setup.sh
+  GIT_REF=12-nov-2026-workshop ./setup.sh
 ```
 
 Para demonstrar entregas a partir de um fork público, envie o código ao fork e use a branch que contém o chart.
