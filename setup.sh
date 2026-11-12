@@ -10,7 +10,6 @@ if [[ ! $lab_name =~ ^[a-z][a-z0-9-]{0,40}$ || $lab_name == *- ]]; then
 fi
 
 state="$root/.lab/$lab_name"
-export KUBECONFIG="$state/kubeconfig"
 argo_version=${ARGOCD_VERSION:-v3.6.1}
 node_image=${KIND_NODE_IMAGE:-kindest/node:v1.35.0}
 wait_seconds=${WAIT_SECONDS:-480}
@@ -43,9 +42,9 @@ create_cluster() {
     local name="$lab_name-$1"
     if cluster_exists "$name"; then
         [[ -f $state/$1-owned ]] || fail "já existe um cluster Kind chamado $name; escolha outro LAB_NAME"
-        kind export kubeconfig --name "$name" --kubeconfig "$KUBECONFIG"
+        kind export kubeconfig --name "$name"
     else
-        kind create cluster --name "$name" --image "$node_image" --kubeconfig "$KUBECONFIG" --wait 180s
+        kind create cluster --name "$name" --image "$node_image" --wait 180s
         : > "$state/$1-owned"
     fi
 }
@@ -89,11 +88,8 @@ start_gateway() {
         "$gateway_image" python /usr/local/bin/lab-gateway.py "http://$east_ip:30080" "http://$west_ip:30080" >/dev/null
 }
 
-apply_argocd() {
-    local region=$1 manifest=$2
-    local k=(kubectl --context "kind-$lab_name-$region")
-    "${k[@]}" create namespace argocd --dry-run=client -o yaml | "${k[@]}" apply -f -
-    "${k[@]}" apply -n argocd --server-side --force-conflicts -f "$manifest"
+prepare_workload_cluster() {
+    local k=(kubectl --context "kind-$lab_name-$1")
     "${k[@]}" create namespace "$app_namespace" --dry-run=client -o yaml | "${k[@]}" apply -f -
     "${k[@]}" -n "$app_namespace" create secret generic lab-gateway --from-file="token=$state/token" \
         --dry-run=client -o yaml | "${k[@]}" apply --server-side -f -
@@ -183,12 +179,10 @@ configure_east_argocd() {
 }
 
 wait_argocd() {
-    local region=$1
-    local k=(kubectl --context "kind-$lab_name-$region")
-    "${k[@]}" -n argocd rollout status deployment/argocd-server --timeout=240s
-    "${k[@]}" -n argocd rollout status deployment/argocd-repo-server --timeout=240s
-    "${k[@]}" -n argocd rollout status deployment/argocd-applicationset-controller --timeout=240s
-    "${k[@]}" -n argocd rollout status statefulset/argocd-application-controller --timeout=240s
+    "${east[@]}" -n argocd rollout status deployment/argocd-server --timeout=240s
+    "${east[@]}" -n argocd rollout status deployment/argocd-repo-server --timeout=240s
+    "${east[@]}" -n argocd rollout status deployment/argocd-applicationset-controller --timeout=240s
+    "${east[@]}" -n argocd rollout status statefulset/argocd-application-controller --timeout=240s
 }
 
 yaml_value() {
@@ -257,18 +251,20 @@ setup() {
     fi
     create_cluster east
     create_cluster west
+    kubectl config use-context "kind-$lab_name-east"
     start_gateway
     endpoint="http://$(gateway_ip):8080"
-    apply_argocd east "$manifest"
-    apply_argocd west "$manifest"
+    "${east[@]}" create namespace argocd --dry-run=client -o yaml | "${east[@]}" apply -f -
+    "${east[@]}" apply -n argocd --server-side --force-conflicts -f "$manifest"
+    prepare_workload_cluster east
+    prepare_workload_cluster west
     register_west
     configure_east_argocd
-    wait_argocd east
-    wait_argocd west
+    wait_argocd
     apply_appset "$repo" "$ref" "$endpoint"
     wait_for_apps "$repo" "$ref"
     show_status
-    printf 'Interface do Argo CD: ./setup.sh ui east  ou  ./setup.sh ui west\n'
+    printf 'Interface do Argo CD: ./setup.sh ui\n'
 }
 
 cleanup() {
@@ -279,17 +275,17 @@ cleanup() {
     fi
     for region in east west; do
         if [[ -f $state/$region-owned ]]; then
-            kind delete cluster --name "$lab_name-$region" --kubeconfig "$KUBECONFIG"
+            kind delete cluster --name "$lab_name-$region"
             rm -f -- "$state/$region-owned"
         fi
     done
-    rm -f -- "$KUBECONFIG" "$state/token" "$state/repo" "$state/ref"
+    rm -f -- "$state/kubeconfig" "$state/token" "$state/repo" "$state/ref"
     rm -rf -- "$state/git"
 }
 
-use_region() {
-    [[ $1 == east || $1 == west ]] || fail "use east ou west"
-    [[ -s $KUBECONFIG ]] || fail "execute ./setup.sh primeiro"
+use_argo() {
+    [[ $1 == east ]] || fail "a interface e a senha do Argo CD ficam em east"
+    [[ -f $state/east-owned ]] || fail "execute ./setup.sh primeiro"
 }
 
 case "${1:-up}" in
@@ -302,14 +298,12 @@ case "${1:-up}" in
     status) show_status ;;
     url) gateway_url ;;
     ui)
-        region=${2:-east}
-        use_region "$region"
-        exec kubectl --context "kind-$lab_name-$region" -n argocd port-forward --address 127.0.0.1 svc/argocd-server :443
+        use_argo "${2:-east}"
+        exec "${east[@]}" -n argocd port-forward --address 127.0.0.1 svc/argocd-server :443
         ;;
     password)
-        region=${2:-east}
-        use_region "$region"
-        kubectl --context "kind-$lab_name-$region" -n argocd get secret argocd-initial-admin-secret \
+        use_argo "${2:-east}"
+        "${east[@]}" -n argocd get secret argocd-initial-admin-secret \
             -o jsonpath='{.data.password}' | decode64
         printf '\n'
         ;;
@@ -319,5 +313,5 @@ case "${1:-up}" in
         lock_lab
         cleanup
         ;;
-    *) fail "uso: ./setup.sh [up|status|url|ui [east|west]|password [east|west]|down]" ;;
+    *) fail "uso: ./setup.sh [up|status|url|ui|password|down]" ;;
 esac

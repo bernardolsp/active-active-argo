@@ -12,7 +12,7 @@ cd active-active-argo
 ./setup.sh
 ```
 
-O script cria `active-active-argo-east` e `active-active-argo-west`, instala o Argo CD nos dois e implanta a versão inicial da branch `12-nov-2026-workshop`. O Argo de `east` gerencia as duas Applications e aguarda um refresh manual para buscar novas revisões no GitHub. O Argo de `west` fica disponível como instalação independente.
+O script cria `active-active-argo-east` e `active-active-argo-west` e instala um Argo CD central em `east`. Ele registra `west` como destino, implanta a versão inicial da branch `12-nov-2026-workshop` nos dois clusters e aguarda um refresh manual para buscar novas revisões no GitHub.
 
 O gateway roda em um container Docker fora dos clusters e distribui o tráfego pelos NodePorts `30080` de `east` e `west`. Os hooks do Kind chamam a API do gateway para tirar e recolocar cada região na rotação. O Docker escolhe uma porta livre em `127.0.0.1` para o gateway e o Kind escolhe as portas das APIs Kubernetes. Para rodar dois laboratórios ao mesmo tempo, use outro `LAB_NAME` e repita a variável em todos os comandos desse laboratório.
 
@@ -22,11 +22,12 @@ O gateway roda em um container Docker fora dos clusters e distribui o tráfego p
 curl -si "$(./setup.sh url)/"
 ```
 
-Abra o Argo CD em outro terminal com `./setup.sh ui east` ou `./setup.sh ui west`. O comando imprime o endereço local e escolhe uma porta livre. Use HTTPS e o usuário `admin`. A senha inicial sai em `./setup.sh password east` ou `./setup.sh password west`. Use o kubeconfig isolado em `.lab/<LAB_NAME>/kubeconfig` para consultar as Applications com kubectl.
+Abra o Argo CD em outro terminal com `./setup.sh ui`. O comando imprime o endereço local e escolhe uma porta livre. Use HTTPS e o usuário `admin`. A senha inicial sai em `./setup.sh password`.
+
+O Kind registra os dois contextos no kubeconfig em uso, seguindo `KUBECONFIG` ou `~/.kube/config`. O setup seleciona `kind-active-active-argo-east`. Use `kubectx` para listar ou alternar os contextos e consulte as Applications no Argo central.
 
 ```bash
-kubectl --kubeconfig .lab/active-active-argo/kubeconfig \
-  --context kind-active-active-argo-east -n argocd get applications
+kubectl --context kind-active-active-argo-east -n argocd get applications
 ```
 
 ## Demonstrar uma entrega
@@ -72,4 +73,4 @@ Use os mesmos `REPO_URL` e `GIT_REF` se repetir o setup.
 ./setup.sh down
 ```
 
-Isso remove os clusters do laboratório, o gateway e as credenciais locais geradas. O fluxo do Kind usa `lab/applicationset.yaml`.
+Isso remove os clusters do laboratório, seus contextos do kubeconfig em uso, o gateway e as credenciais locais geradas. O fluxo do Kind usa `lab/applicationset.yaml`.
