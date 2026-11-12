@@ -10,12 +10,6 @@ service:
   port: 80
   targetPort: 80
 
-ingress:
-  enabled: true
-  host: ""
-
-cluster_name: node01
-
 hooks:
   mode: ""
   local:

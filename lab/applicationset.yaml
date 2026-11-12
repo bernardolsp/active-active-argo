@@ -42,8 +42,6 @@ spec:
               value: $ARGOCD_APP_REVISION
               forceString: true
           values: |
-            ingress:
-              enabled: false
             service:
               type: NodePort
               nodePort: 30080
