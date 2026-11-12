@@ -189,10 +189,17 @@ EOF
 encode64() { base64 | tr -d '\r\n'; }
 decode64() { base64 -d; }
 
-enable_rolling_sync() {
-    local flag
+configure_east_argocd() {
+    local flag polling
     "${east[@]}" -n argocd patch configmap argocd-cm --type merge \
         -p '{"data":{"resource.respectRBAC":"normal"}}'
+    polling=$("${east[@]}" -n argocd get configmap argocd-cm \
+        -o 'jsonpath={.data.timeout\.reconciliation}{"/"}{.data.timeout\.reconciliation\.jitter}{"/"}{.data.timeout\.hard\.reconciliation}')
+    if [[ $polling != 0s/0s/0s ]]; then
+        "${east[@]}" -n argocd patch configmap argocd-cm --type merge \
+            -p '{"data":{"timeout.reconciliation":"0s","timeout.reconciliation.jitter":"0s","timeout.hard.reconciliation":"0s"}}'
+        "${east[@]}" -n argocd rollout restart deployment/argocd-repo-server statefulset/argocd-application-controller
+    fi
     flag=$("${east[@]}" -n argocd get configmap argocd-cmd-params-cm \
         -o 'jsonpath={.data.applicationsetcontroller\.enable\.progressive\.syncs}')
     if [[ $flag != true ]]; then
@@ -276,24 +283,25 @@ setup() {
         [[ $repo == https://* || $repo == http://* ]] || fail "REPO_URL precisa usar HTTP ou HTTPS"
         ref=${GIT_REF:-HEAD}
     else
-        publish_snapshot
         repo="$endpoint/git/lab.git"
         ref=main
-        revision=$(git --git-dir="$state/git/lab.git" rev-parse main)
+        if ! git --git-dir="$state/git/lab.git" rev-parse --verify refs/heads/main >/dev/null 2>&1; then
+            publish_snapshot
+            revision=$(git --git-dir="$state/git/lab.git" rev-parse refs/heads/main)
+        fi
     fi
     [[ $repo != *$'\n'* && $ref != *$'\n'* && $repo != *$'\r'* && $ref != *$'\r'* ]] ||
         fail "REPO_URL e GIT_REF não podem conter quebras de linha"
-    printf '%s\n' "$repo" > "$state/repo"
-    printf '%s\n' "$ref" > "$state/ref"
     apply_argocd east "$manifest"
     apply_argocd west "$manifest"
     register_west
-    enable_rolling_sync
+    configure_east_argocd
     wait_argocd east
     wait_argocd west
     apply_appset "$repo" "$ref" "$endpoint"
-    "${east[@]}" -n argocd annotate application -l lab-region argocd.argoproj.io/refresh=hard --overwrite
     wait_for_apps "$repo" "$ref" "$revision"
+    printf '%s\n' "$repo" > "$state/repo"
+    printf '%s\n' "$ref" > "$state/ref"
     show_status
     printf 'Interface do Argo CD: ./setup.sh ui east  ou  ./setup.sh ui west\n'
 }
@@ -327,11 +335,10 @@ case "${1:-up}" in
         setup
         ;;
     publish)
+        lock_lab
         [[ -s $state/repo && $(cat "$state/repo") == */git/lab.git ]] ||
             fail "publish requer o laboratório configurado com Git local"
-        lock_lab
         publish_snapshot
-        "${east[@]}" -n argocd annotate application app-east app-west argocd.argoproj.io/refresh=hard --overwrite
         ;;
     status) show_status ;;
     url) gateway_url ;;
