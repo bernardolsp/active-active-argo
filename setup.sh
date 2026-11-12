@@ -18,6 +18,7 @@ drain_seconds=${DRAIN_SECONDS:-5}
 app_namespace=active-active-argo
 gateway="$lab_name-gateway"
 gateway_image=active-active-argo-gateway:local
+workshop_repo=https://github.com/bernardolsp/active-active-argo.git
 east=(kubectl --context "kind-$lab_name-east")
 west=(kubectl --context "kind-$lab_name-west")
 
@@ -85,35 +86,7 @@ start_gateway() {
         --label "lab.active-active-argo.owner=$state" \
         --publish 127.0.0.1::8080 \
         --mount "type=bind,source=$state/token,target=/lab/token,readonly" \
-        --mount "type=bind,source=$state/git,target=/lab/git,readonly" \
         "$gateway_image" python /usr/local/bin/lab-gateway.py "http://$east_ip:30080" "http://$west_ip:30080" >/dev/null
-}
-
-publish_snapshot() {
-    local snapshot revision
-    mkdir -p "$state/git"
-    if [[ ! -d $state/git/lab.git ]]; then
-        git init -q --bare --initial-branch=main "$state/git/lab.git"
-    fi
-    snapshot=$(mktemp -d "$state/snapshot.XXXXXX")
-    (
-        trap 'rm -rf -- "$snapshot"' EXIT
-        git init -q --initial-branch=main "$snapshot"
-        if git --git-dir="$state/git/lab.git" rev-parse --verify main >/dev/null 2>&1; then
-            git -C "$snapshot" pull -q "$state/git/lab.git" main
-        fi
-        rm -rf -- "$snapshot/app-default"
-        cp -R "$root/app-default" "$snapshot/app-default"
-        git -C "$snapshot" add -A
-        if ! git -C "$snapshot" diff --cached --quiet; then
-            git -C "$snapshot" -c user.name='Active-active Kind lab' -c user.email='kind-lab@localhost' \
-                -c commit.gpgsign=false commit -qm 'Atualiza o chart da demonstração'
-            git -C "$snapshot" push -q "$state/git/lab.git" HEAD:main
-        fi
-        git --git-dir="$state/git/lab.git" update-server-info
-        revision=$(git --git-dir="$state/git/lab.git" rev-parse --short main)
-        printf 'Revisão publicada no Git local: %s\n' "$revision"
-    )
 }
 
 apply_argocd() {
@@ -234,7 +207,7 @@ apply_appset() {
 }
 
 wait_for_apps() {
-    local repo=$1 ref=$2 revision=${3:-*}
+    local repo=$1 ref=$2
     local deadline=$((SECONDS + wait_seconds)) east_status west_status
     local expected_source="$repo"$'\t'"$ref"$'\t'
     local output='{.status.sync.comparedTo.source.repoURL}{"\t"}{.status.sync.comparedTo.source.targetRevision}{"\t"}{.status.sync.revision}{"\t"}{.status.sync.status}/{.status.health.status}/{.status.operationState.phase}/{.operation.sync.revision}'
@@ -242,8 +215,8 @@ wait_for_apps() {
     while (( SECONDS < deadline )); do
         east_status=$("${east[@]}" -n argocd get application app-east --ignore-not-found -o "jsonpath=$output")
         west_status=$("${east[@]}" -n argocd get application app-west --ignore-not-found -o "jsonpath=$output")
-        if [[ $east_status == "$expected_source"$revision$'\tSynced/Healthy/Succeeded/' &&
-              $west_status == "$expected_source"$revision$'\tSynced/Healthy/Succeeded/' ]]; then
+        if [[ $east_status == "$expected_source"*$'\tSynced/Healthy/Succeeded/' &&
+              $west_status == "$expected_source"*$'\tSynced/Healthy/Succeeded/' ]]; then
             return
         fi
         sleep 3
@@ -261,10 +234,19 @@ show_status() {
 }
 
 setup() {
-    local manifest="$state/install-$argo_version.yaml" endpoint repo ref revision=
+    local manifest="$state/install-$argo_version.yaml" endpoint repo ref
     [[ $argo_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "ARGOCD_VERSION inválido"
     [[ $drain_seconds =~ ^([0-9]|[1-5][0-9]|60)$ ]] || fail "DRAIN_SECONDS deve estar entre 0 e 60"
     [[ $wait_seconds =~ ^[1-9][0-9]*$ ]] || fail "WAIT_SECONDS deve ser um inteiro positivo"
+    repo=${REPO_URL:-$workshop_repo}
+    if [[ $repo == "$workshop_repo" ]]; then
+        ref=${GIT_REF:-12-nov-2026-workshop}
+    else
+        ref=${GIT_REF:-HEAD}
+    fi
+    [[ $repo == https://* || $repo == http://* ]] || fail "REPO_URL precisa usar HTTP ou HTTPS"
+    [[ $repo != *$'\n'* && $ref != *$'\n'* && $repo != *$'\r'* && $ref != *$'\r'* ]] ||
+        fail "REPO_URL e GIT_REF não podem conter quebras de linha"
     if [[ ! -s $manifest ]]; then
         curl --fail --silent --show-error --location --retry 2 \
             "https://raw.githubusercontent.com/argoproj/argo-cd/$argo_version/manifests/install.yaml" -o "$manifest.tmp"
@@ -275,23 +257,8 @@ setup() {
     fi
     create_cluster east
     create_cluster west
-    mkdir -p "$state/git"
     start_gateway
     endpoint="http://$(gateway_ip):8080"
-    repo=${REPO_URL:-}
-    if [[ -n $repo ]]; then
-        [[ $repo == https://* || $repo == http://* ]] || fail "REPO_URL precisa usar HTTP ou HTTPS"
-        ref=${GIT_REF:-HEAD}
-    else
-        repo="$endpoint/git/lab.git"
-        ref=main
-        if ! git --git-dir="$state/git/lab.git" rev-parse --verify refs/heads/main >/dev/null 2>&1; then
-            publish_snapshot
-            revision=$(git --git-dir="$state/git/lab.git" rev-parse refs/heads/main)
-        fi
-    fi
-    [[ $repo != *$'\n'* && $ref != *$'\n'* && $repo != *$'\r'* && $ref != *$'\r'* ]] ||
-        fail "REPO_URL e GIT_REF não podem conter quebras de linha"
     apply_argocd east "$manifest"
     apply_argocd west "$manifest"
     register_west
@@ -299,9 +266,7 @@ setup() {
     wait_argocd east
     wait_argocd west
     apply_appset "$repo" "$ref" "$endpoint"
-    wait_for_apps "$repo" "$ref" "$revision"
-    printf '%s\n' "$repo" > "$state/repo"
-    printf '%s\n' "$ref" > "$state/ref"
+    wait_for_apps "$repo" "$ref"
     show_status
     printf 'Interface do Argo CD: ./setup.sh ui east  ou  ./setup.sh ui west\n'
 }
@@ -329,16 +294,10 @@ use_region() {
 
 case "${1:-up}" in
     up)
-        for cmd in docker kind kubectl git curl; do check_command "$cmd"; done
+        for cmd in docker kind kubectl curl; do check_command "$cmd"; done
         docker info >/dev/null 2>&1 || fail "inicie o Docker e confira o contexto ativo"
         lock_lab
         setup
-        ;;
-    publish)
-        lock_lab
-        [[ -s $state/repo && $(cat "$state/repo") == */git/lab.git ]] ||
-            fail "publish requer o laboratório configurado com Git local"
-        publish_snapshot
         ;;
     status) show_status ;;
     url) gateway_url ;;
@@ -360,5 +319,5 @@ case "${1:-up}" in
         lock_lab
         cleanup
         ;;
-    *) fail "uso: ./setup.sh [up|publish|status|url|ui [east|west]|password [east|west]|down]" ;;
+    *) fail "uso: ./setup.sh [up|status|url|ui [east|west]|password [east|west]|down]" ;;
 esac

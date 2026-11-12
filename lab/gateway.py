@@ -1,20 +1,17 @@
-"""Local Git HTTP server and round-robin gateway for the two Kind clusters."""
+"""Round-robin gateway for the two Kind clusters."""
 
 import hmac
 import itertools
 import json
-import os
 import re
-import subprocess
 import sys
 import threading
 import time
 from collections import deque
-from email.parser import BytesHeaderParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 
@@ -76,61 +73,6 @@ def enable_backend(region, revision):
 
 
 class Gateway(BaseHTTPRequestHandler):
-    def git_backend(self, url, head=False):
-        path = unquote(url.path.removeprefix("/git"))
-        if not path.startswith("/lab.git/") or ".." in path.split("/"):
-            return self.send_json(404, {"error": "Unknown repository"}, head)
-        if self.command == "POST" and path != "/lab.git/git-upload-pack":
-            return self.send_json(405, {"error": "Repository is read-only"})
-        length = self.headers.get("Content-Length", "0")
-        if not length.isdecimal() or int(length) > 1024 * 1024:
-            return self.send_json(413, {"error": "Invalid request size"}, head)
-        env = {
-            **os.environ,
-            "GIT_PROJECT_ROOT": "/lab/git",
-            "GIT_HTTP_EXPORT_ALL": "1",
-            "GIT_CONFIG_COUNT": "1",
-            "GIT_CONFIG_KEY_0": "safe.directory",
-            "GIT_CONFIG_VALUE_0": "/lab/git/lab.git",
-            "REQUEST_METHOD": self.command,
-            "PATH_INFO": path,
-            "QUERY_STRING": url.query,
-            "CONTENT_TYPE": self.headers.get("Content-Type", ""),
-            "CONTENT_LENGTH": length,
-            "HTTP_GIT_PROTOCOL": self.headers.get("Git-Protocol", ""),
-        }
-        try:
-            result = subprocess.run(
-                ["git", "http-backend"],
-                env=env,
-                input=self.rfile.read(int(length)),
-                capture_output=True,
-                timeout=30,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            return self.send_json(504, {"error": "Git backend timed out"}, head)
-        raw_headers, separator, body = result.stdout.partition(b"\r\n\r\n")
-        if not separator:
-            raw_headers, separator, body = result.stdout.partition(b"\n\n")
-        if not separator:
-            self.log_error(
-                "git http-backend exited with status %s: %s",
-                result.returncode,
-                result.stderr.decode(errors="replace"),
-            )
-            return self.send_json(502, {"error": "Git backend unavailable"}, head)
-        headers = BytesHeaderParser().parsebytes(raw_headers)
-        self.send_response(int(headers.get("Status", "200").split()[0]))
-        for name, value in headers.items():
-            if name.lower() != "status":
-                self.send_header(name, value)
-        if "Content-Length" not in headers:
-            self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        if not head:
-            self.wfile.write(body)
-
     def send_json(self, status, payload, head=False):
         body = json.dumps(payload).encode() + b"\n"
         self.send_response(status)
@@ -148,8 +90,6 @@ class Gateway(BaseHTTPRequestHandler):
 
     def route(self, head):
         url = urlsplit(self.path)
-        if url.path.startswith("/git/"):
-            return self.git_backend(url, head)
         if url.path in ("/_lab/status", "/_lab/events"):
             with LOCK:
                 data = (
@@ -183,10 +123,7 @@ class Gateway(BaseHTTPRequestHandler):
         self.send_json(503, {"error": "No healthy backend"}, head)
 
     def do_POST(self):
-        url = urlsplit(self.path)
-        if url.path.startswith("/git/"):
-            return self.git_backend(url)
-        parts = url.path.strip("/").split("/")
+        parts = urlsplit(self.path).path.strip("/").split("/")
         if len(parts) != 3 or parts[0] != "_lab" or parts[1] not in BACKENDS:
             return self.send_json(404, {"error": "Unknown route"})
         _, region, action = parts

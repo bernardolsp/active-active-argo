@@ -12,7 +12,7 @@ cd active-active-argo
 ./setup.sh
 ```
 
-O script cria `active-active-argo-east` e `active-active-argo-west`, instala o Argo CD nos dois e deixa a versão inicial da aplicação saudável nos dois clusters. O Argo de `east` gerencia as duas Applications e aguarda um refresh manual para buscar novas revisões do Git. O Argo de `west` fica disponível como instalação independente. Os hooks usam o gateway local e dispensam credenciais do Cloudflare.
+O script cria `active-active-argo-east` e `active-active-argo-west`, instala o Argo CD nos dois e implanta a versão inicial da branch `12-nov-2026-workshop`. O Argo de `east` gerencia as duas Applications e aguarda um refresh manual para buscar novas revisões no GitHub. O Argo de `west` fica disponível como instalação independente.
 
 O gateway roda em um container Docker fora dos clusters e distribui o tráfego pelos NodePorts `30080` de `east` e `west`. Os hooks do Kind chamam a API do gateway para tirar e recolocar cada região na rotação. O Docker escolhe uma porta livre em `127.0.0.1` para o gateway e o Kind escolhe as portas das APIs Kubernetes. Para rodar dois laboratórios ao mesmo tempo, use outro `LAB_NAME` e repita a variável em todos os comandos desse laboratório.
 
@@ -41,30 +41,30 @@ kubectl --kubeconfig .lab/active-active-argo/kubeconfig \
    done
    ```
 
-2. Em outro terminal, altere `image.tag` de `v1.9.0` para `v1.11.0` em `app-default/values.yaml` e rode `./setup.sh publish`. O comando publica o chart no Git local, incluindo mudanças ainda sem commit. A versão que atende o tráfego continua a mesma até o refresh.
-3. No Argo CD de `east`, abra `app-east` e escolha **Refresh → Hard Refresh**. O ApplicationSet atualiza a revisão de `app-west` e inicia o RollingSync. Aguarde o Argo CD iniciar a primeira onda em `east`, seguida de `west`.
+2. Em outro terminal, altere `image.tag` de `v1.9.0` para `v1.11.0` em `app-default/values.yaml`, faça commit e envie a alteração para a branch que o Argo CD acompanha. A versão que atende o tráfego continua a mesma até o refresh.
+
+   ```bash
+   git add app-default/values.yaml
+   git commit -m "Atualiza a imagem da aplicação"
+   git push
+   ```
+
+3. No Argo CD de `east`, abra `app-east` e escolha **Refresh → Hard Refresh**. O ApplicationSet atualiza a revisão de `app-west` e inicia o RollingSync. A primeira onda, em `east`, pode levar cerca de um minuto para começar. Depois dela, o Argo CD atualiza `west`.
 4. Acompanhe `./setup.sh status` e consulte os eventos com `curl -fsS "$(./setup.sh url)/_lab/events"`. Durante a entrega, o tráfego fica na outra região. Depois das duas ondas, volta a alternar entre `east` e `west`. O atraso do `PreSync` é de cinco segundos por padrão. Para observar a troca por mais tempo, suba o laboratório com `DRAIN_SECONDS=15 ./setup.sh`.
 
 O gateway registra cada mudança de tráfego com o SHA da entrega. Se o Argo CD repetir um sync da mesma revisão após o `PostSync`, os hooks preservam a região na rotação.
 
 Se um deploy falhar após o `PreSync`, o gateway mantém aquela região fora da rotação. Publique a correção e acompanhe o próximo sync. Para consultar um hook que falhou, use `kubectl -n active-active-argo get jobs` e `kubectl -n active-active-argo logs job/<nome>` no contexto da região correspondente.
 
-### Usar um repositório remoto
+### Usar um fork
 
-Para usar a branch publicada deste laboratório como fonte do Argo CD:
-
-```bash
-REPO_URL=https://github.com/bernardolsp/active-active-argo.git \
-  GIT_REF=12-nov-2026-workshop ./setup.sh
-```
-
-Para demonstrar entregas a partir de um fork público, envie o código ao fork e use a branch que contém o chart.
+Se você for publicar a alteração em um fork público, configure a URL e a branch que contém o chart ao subir o laboratório.
 
 ```bash
 REPO_URL=https://github.com/SEU-USUARIO/active-active-argo.git GIT_REF=minha-branch ./setup.sh
 ```
 
-Nesse modo, faça commit e push para publicar a alteração. Dispare a entrega com **Hard Refresh** em `app-east`, como na demonstração local. Use os mesmos `REPO_URL` e `GIT_REF` se repetir o bootstrap. Sem essas variáveis, o script usa o Git local.
+Use os mesmos `REPO_URL` e `GIT_REF` se repetir o setup.
 
 ## Limpar
 
